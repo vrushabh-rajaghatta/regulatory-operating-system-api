@@ -69,6 +69,33 @@ from app.core.schemas import PaginationParams, PaginatedResponse, MessageRespons
 router = APIRouter()
 
 
+SEQUENCE_NUMBER_WIDTH = 4
+
+
+def _generate_sequence_number(db: Session, product_id: UUID) -> str:
+    """Generate the next zero-padded sequence number for a product.
+
+    Numbers are sequential per product starting at "0000". The same value
+    can repeat across different products. Falls back to scanning existing
+    values defensively in case any row is malformed.
+    """
+    existing = (
+        db.query(Submission.sequence_number)
+        .filter(
+            Submission.product_id == product_id,
+            Submission.sequence_number.isnot(None),
+        )
+        .all()
+    )
+    max_seq = -1
+    for (number,) in existing:
+        try:
+            max_seq = max(max_seq, int(number))
+        except (TypeError, ValueError):
+            continue
+    return f"{max_seq + 1:0{SEQUENCE_NUMBER_WIDTH}d}"
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_submission(
     submission: SubmissionCreate,
@@ -102,11 +129,12 @@ async def create_submission(
         )
     
     # Create submission (inherits org from its project).
+    sequence_number = _generate_sequence_number(db, submission.product_id)
     db_submission = Submission(
         organization_id=project.organization_id,
         project_id=submission.project_id,
         product_id=submission.product_id,
-        name=submission.name,
+        sequence_number=sequence_number,
         submission_type=submission.submission_type,
         target_submission_date=submission.target_submission_date
     )
@@ -129,7 +157,7 @@ async def create_submission(
     # Return submission details
     return {
         "id": str(db_submission.id),
-        "name": db_submission.name,
+        "sequence_number": db_submission.sequence_number,
         "submission_type": db_submission.submission_type,
         "status": db_submission.status.value,
         "project_id": str(db_submission.project_id),
@@ -170,7 +198,13 @@ async def list_submissions(
         query = query.filter(Submission.status == status_filter)
     
     if search:
-        query = query.filter(Submission.name.ilike(f"%{search}%"))
+        like_pattern = f"%{search}%"
+        query = query.filter(
+            or_(
+                Submission.sequence_number.ilike(like_pattern),
+                Submission.submission_type.ilike(like_pattern),
+            )
+        )
     
     # Get total count
     total = query.count()
@@ -190,7 +224,7 @@ async def list_submissions(
         
         submission_summary = SubmissionSummary(
             id=submission.id,
-            name=submission.name,
+            sequence_number=submission.sequence_number,
             status=submission.status,
             target_submission_date=submission.target_submission_date,
             completion_percentage=completion_percentage,
@@ -243,7 +277,7 @@ async def get_submission(
     # Create response with computed fields
     response_data = SubmissionResponse(
         id=submission.id,
-        name=submission.name,
+        sequence_number=submission.sequence_number,
         submission_type=submission.submission_type,
         health_canada_reference=submission.health_canada_reference,
         target_submission_date=submission.target_submission_date,
@@ -332,7 +366,7 @@ async def update_submission(
     # Return a simple dictionary to avoid Pydantic validation issues
     return {
         "id": str(db_submission.id),
-        "name": db_submission.name,
+        "sequence_number": db_submission.sequence_number,
         "submission_type": db_submission.submission_type,
         "status": db_submission.status.value if db_submission.status else "draft",
         "project_id": str(db_submission.project_id),
@@ -589,7 +623,7 @@ async def get_submission_dossier(
     
     return {
         "submission_id": str(submission_id),
-        "submission_name": submission.name,
+        "sequence_number": submission.sequence_number,
         "submission_type": submission.submission_type,
         "dossier_sections": dossier_structure,
         "total_sections": len(dossier_structure),

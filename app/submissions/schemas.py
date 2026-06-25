@@ -18,14 +18,13 @@ from app.core.schemas import (
 class SubmissionBase(BaseSchema):
     """Base submission schema with common fields."""
     
-    name: str = Field(..., min_length=1, max_length=255, description="Submission name")
     submission_type: Optional[str] = Field(None, max_length=255, description="Type of submission (e.g., Medical Device License)")
     health_canada_reference: Optional[str] = Field(None, max_length=255, description="Health Canada reference number")
     target_submission_date: Optional[date] = Field(None, description="Target date for submission")
 
 
 class SubmissionCreate(SubmissionBase):
-    """Schema for creating a new submission."""
+    """Schema for creating a new submission. sequence_number is auto-generated server-side."""
     
     project_id: UUID = Field(..., description="ID of the parent project")
     product_id: UUID = Field(..., description="ID of the associated product")
@@ -35,7 +34,6 @@ class SubmissionCreate(SubmissionBase):
 class SubmissionUpdate(BaseSchema):
     """Schema for updating an existing submission."""
     
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
     submission_type: Optional[str] = Field(None, max_length=255)
     status: Optional[SubmissionStatusEnum] = None
     health_canada_reference: Optional[str] = Field(None, max_length=255)
@@ -54,6 +52,7 @@ class SubmissionStatusUpdate(BaseSchema):
 class SubmissionResponse(SubmissionBase, UUIDSchema, TimestampSchema):
     """Schema for submission API responses."""
     
+    sequence_number: str = Field(..., description="Zero-padded sequential number per product (e.g. '0000')")
     project_id: UUID
     product_id: UUID
     status: SubmissionStatusEnum
@@ -84,7 +83,7 @@ class SubmissionWithDetails(SubmissionResponse):
 class SubmissionSummary(UUIDSchema):
     """Lightweight submission summary for lists and references."""
     
-    name: str
+    sequence_number: str
     status: SubmissionStatusEnum
     target_submission_date: Optional[date]
     completion_percentage: Optional[float]
@@ -134,7 +133,7 @@ class SubmissionSearchFilters(BaseSchema):
     submission_type: Optional[str] = None
     target_date_from: Optional[date] = None
     target_date_to: Optional[date] = None
-    search_term: Optional[str] = Field(None, description="Search in name or submission_type")
+    search_term: Optional[str] = Field(None, description="Search in sequence_number or submission_type")
 
 
 class SubmissionProgress(BaseSchema):

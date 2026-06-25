@@ -2,7 +2,7 @@
 Submission models for managing regulatory submissions.
 """
 
-from sqlalchemy import Column, String, Enum, ForeignKey, Date, DateTime
+from sqlalchemy import Column, String, Enum, ForeignKey, Date, DateTime, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import enum
@@ -29,11 +29,16 @@ class Submission(BaseModel, AuditMixin):
     """
     
     __tablename__ = "submissions"
+    __table_args__ = (
+        UniqueConstraint("product_id", "sequence_number", name="uq_submissions_product_id_sequence_number"),
+    )
     
     organization_id = Column(UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=False, index=True)
     project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id"), nullable=False, index=True)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=False, index=True)
+    # Zero-padded sequential number scoped to the parent product (e.g. "0000", "0001").
+    # Unique per product; the same value can repeat across different products.
+    sequence_number = Column(String(32), nullable=False, index=True)
     submission_type = Column(String(255), nullable=True)  # e.g., "Medical Device License", "Amendment"
     status = Column(Enum(SubmissionStatus), default=SubmissionStatus.DRAFT, nullable=False, index=True)
     health_canada_reference = Column(String(255), nullable=True, index=True)
@@ -51,4 +56,4 @@ class Submission(BaseModel, AuditMixin):
     consistency_checks = relationship("app.validation.models.ConsistencyCheck", back_populates="submission", cascade="all, delete-orphan")
     
     def __repr__(self) -> str:
-        return f"<Submission(id={self.id}, name='{self.name}', status='{self.status}')>"
+        return f"<Submission(id={self.id}, sequence_number='{self.sequence_number}', status='{self.status}')>"
