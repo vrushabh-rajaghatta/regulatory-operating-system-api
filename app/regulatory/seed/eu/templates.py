@@ -5,7 +5,10 @@ from typing import Any
 from app.regulatory.seed.framework import node
 
 STRUCTURES: dict[str, list[dict[str, Any]]] = {
-    # EU MDR (2017/745) technical documentation — Annex II / III.
+    # EU MDR (2017/745) technical documentation — Annex II (+ Annex III PMS).
+    # Top-level headings confirmed against the EUR-Lex consolidated text of
+    # Regulation (EU) 2017/745, Annex II. SOURCE / VERIFY: EUR-Lex CELEX
+    # 02017R0745; PMCF (6.4) is device-conditional.
     "EU_MDR_TECH_DOC": [
         node("1", "Device Description and Specification", 1, children=[
             node("1.1", "Device Description and Variants", 1),
@@ -26,6 +29,9 @@ STRUCTURES: dict[str, list[dict[str, Any]]] = {
         ]),
     ],
     # EU IVDR (2017/746) technical documentation — Annex II.
+    # SOURCE / VERIFY: EUR-Lex CELEX 02017R0746, Annex II. Performance Evaluation
+    # (scientific validity / analytical / clinical performance) per Annex XIII;
+    # PMPF (6.4) is device-conditional.
     "EU_IVDR_TECH_DOC": [
         node("1", "Device Description and Specification", 1, children=[
             node("1.1", "Device Description and Variants", 1),
@@ -51,6 +57,6 @@ PROFILE_STRUCTURE: dict[str, str] = {
 }
 
 RELEASE_NOTES: dict[str, str] = {
-    "EU_MDR_TECH_DOC": "Initial 2025.1 release aligned to EU MDR Annex II/III technical documentation.",
-    "EU_IVDR_TECH_DOC": "Initial 2025.1 release aligned to EU IVDR Annex II technical documentation.",
+    "EU_MDR_TECH_DOC": "2025.2 — Annex II headings confirmed against EUR-Lex (Reg. 2017/745). Pending RA verification.",
+    "EU_IVDR_TECH_DOC": "2025.2 — aligned to EU IVDR Annex II (Reg. 2017/746). Pending RA verification.",
 }

@@ -14,7 +14,12 @@ from app.auth.models import User
 from app.core.database import get_db
 from app.dossier.models import DossierSection
 from app.submissions.models import Submission
-from app.dossier.services import DossierGenerationService, DossierContentService
+from app.dossier.services import (
+    DossierGenerationService,
+    DossierContentService,
+    is_leaf_section,
+    parent_section_ids,
+)
 from app.dossier.schemas import (
     DossierSectionCreate,
     DossierSectionUpdate,
@@ -223,9 +228,8 @@ async def delete_dossier_section(
     """Delete a specific dossier section."""
     db_section = _get_scoped_section(section_id, db, current_user)
     
-    # Check if section has children
-    child_count = db.query(DossierSection).filter(DossierSection.parent_section_id == section_id).count()
-    if child_count > 0:
+    # Cannot delete a section that still has children.
+    if not is_leaf_section(db, section_id):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Cannot delete section with child sections"
@@ -254,7 +258,10 @@ async def get_dossier_structure(
     # Build hierarchical structure
     sections_dict = {section.id: section for section in sections}
     root_sections = []
-    
+
+    # Single source of truth for leaf-ness across the whole tree (computed once).
+    parent_ids = parent_section_ids(sections)
+
     def build_section_tree(section) -> DossierSectionTree:
         # Find children
         children = [
@@ -285,7 +292,7 @@ async def get_dossier_structure(
             extracted_content_count=0,  # Would be computed
             reviews_count=0,  # Would be computed
             missing_content_alerts=0,  # Would be computed
-            is_leaf=len(children) == 0,
+            is_leaf=section.id not in parent_ids,
             children=children
         )
         

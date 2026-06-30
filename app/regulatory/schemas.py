@@ -493,6 +493,30 @@ class TemplateVersionResponse(TemplateVersionBase, UUIDSchema, TimestampSchema):
     )
 
 
+class TemplateCatalogEntry(BaseSchema):
+    """
+    A template version flattened with its regulatory breadcrumb, for the
+    "available templates" listing. One row per template version.
+    """
+
+    template_version_id: UUID
+    version: str
+    status: TemplateStatusEnum
+    is_latest: bool
+    sections_count: int
+
+    country_name: str
+    country_code: str
+    authority_name: str
+    authority_abbreviation: Optional[str] = None
+    regulation_name: str
+    submission_type_name: str
+    submission_type_code: str
+    submission_profile_id: UUID
+    submission_profile_name: str
+    submission_profile_code: str
+
+
 # --------------------------------------------------------------------------- #
 # TemplateSection
 # --------------------------------------------------------------------------- #

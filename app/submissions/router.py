@@ -16,7 +16,7 @@ from app.submissions.models import Submission, SubmissionDocument, SubmissionVal
 from app.products.models import Product
 from app.projects.models import Project
 from app.dossier.models import DossierSection
-from app.dossier.services import DossierGenerationService, DossierContentService, LeafSectionRequiredError
+from app.dossier.services import DossierGenerationService, DossierContentService, LeafSectionRequiredError, is_leaf_section
 from app.ai.services import AIProcessingService
 from app.regulatory.models import TemplateVersion
 from app.regulatory.services import RequiredDocumentService
@@ -879,9 +879,7 @@ async def get_dossier_section(
     status = _derive_section_status(section)
 
     # Section is a leaf iff no other section lists it as parent
-    is_leaf = db.query(DossierSection.id).filter(
-        DossierSection.parent_section_id == section.id
-    ).first() is None
+    is_leaf = is_leaf_section(db, section.id)
     
     # Generate placeholder content based on section info
     placeholder_content = f"""# {section.section_title}

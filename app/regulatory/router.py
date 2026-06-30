@@ -66,6 +66,7 @@ from app.regulatory.schemas import (
     TemplateVersionUpdate,
     TemplateVersionResponse,
     TemplateVersionSummary,
+    TemplateCatalogEntry,
     TemplateSectionCreate,
     TemplateSectionUpdate,
     TemplateSectionResponse,
@@ -669,6 +670,45 @@ async def delete_risk_classification(
 # --------------------------------------------------------------------------- #
 # Template Versions
 # --------------------------------------------------------------------------- #
+@router.get("/templates", response_model=list[TemplateCatalogEntry])
+async def list_template_catalog(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    List every template version with its full regulatory breadcrumb
+    (country / authority / regulation / submission type / profile), for the
+    admin "Templates" browser. One row per template version.
+    """
+    entries: list[TemplateCatalogEntry] = []
+    for tv in TemplateVersionService(db).catalog():
+        profile = tv.submission_profile
+        submission_type = profile.submission_type
+        regulation = submission_type.regulation
+        authority = regulation.authority
+        country = authority.country
+        entries.append(
+            TemplateCatalogEntry(
+                template_version_id=tv.id,
+                version=tv.version,
+                status=tv.status,
+                is_latest=tv.is_latest,
+                sections_count=len(tv.sections),
+                country_name=country.name,
+                country_code=country.code,
+                authority_name=authority.name,
+                authority_abbreviation=authority.abbreviation,
+                regulation_name=regulation.name,
+                submission_type_name=submission_type.name,
+                submission_type_code=submission_type.code,
+                submission_profile_id=profile.id,
+                submission_profile_name=profile.name,
+                submission_profile_code=profile.code,
+            )
+        )
+    return entries
+
+
 @router.post("/template-versions", response_model=TemplateVersionResponse, status_code=status.HTTP_201_CREATED)
 async def create_template_version(
     payload: TemplateVersionCreate,

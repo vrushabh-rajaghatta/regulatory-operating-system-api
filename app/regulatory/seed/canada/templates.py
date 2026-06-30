@@ -4,6 +4,10 @@ from typing import Any
 
 from app.regulatory.seed.framework import node
 
+# Health Canada has adopted the IMDRF non-IVD Market Authorization Table of
+# Contents (nIVD MA ToC). Chapter 1 (Regional Administrative) is HC-specific;
+# Chapters 2-6 are the harmonised IMDRF ToC. SOURCE / VERIFY: IMDRF nIVD MA ToC
+# + HC "Regulatory Review of Medical Devices using the IMDRF ToC" guidance.
 STRUCTURES: dict[str, list[dict[str, Any]]] = {
     "IMDRF_TOC": [
         node("1", "Regional Administrative", 1, description="Region-specific administrative documents.", children=[
@@ -47,5 +51,5 @@ PROFILE_STRUCTURE: dict[str, str] = {
 }
 
 RELEASE_NOTES: dict[str, str] = {
-    "IMDRF_TOC": "Initial 2025.1 release aligned to the IMDRF Table of Contents.",
+    "IMDRF_TOC": "2025.2 — aligned to the IMDRF nIVD MA ToC (HC regional Chapter 1). Pending RA verification.",
 }

@@ -4,6 +4,11 @@ from typing import Any
 
 from app.regulatory.seed.framework import node
 
+# PMDA Summary Technical Documentation (STED), based on the GHTF/IMDRF STED
+# format (GHTF/SG1/N011). Clinical evidence (7) is device-conditional.
+# SOURCE / VERIFY: MHLW/PMDA STED notifications + GHTF/SG1/N011; reconcile
+# against the current PMDA application requirements before treating as
+# filing-authoritative.
 STRUCTURES: dict[str, list[dict[str, Any]]] = {
     "JP_STED": [
         node("1", "Application Form (Shinsei-sho)", 1),
@@ -29,5 +34,5 @@ PROFILE_STRUCTURE: dict[str, str] = {
 }
 
 RELEASE_NOTES: dict[str, str] = {
-    "JP_STED": "Initial 2025.1 release aligned to the PMDA STED structure.",
+    "JP_STED": "2025.2 — aligned to the PMDA/GHTF STED structure (GHTF/SG1/N011). Pending RA verification.",
 }

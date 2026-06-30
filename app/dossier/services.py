@@ -8,7 +8,7 @@ based on IMDRF templates when submissions are created.
 import json
 import uuid
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Dict, Iterable, List, Any, Optional, Set
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -20,13 +20,35 @@ class LeafSectionRequiredError(Exception):
 
 
 def is_leaf_section(db: Session, section_id: uuid.UUID) -> bool:
-    """A section is a leaf iff no other section lists it as parent."""
+    """
+    A section is a leaf iff no other section lists it as parent.
+
+    Single-section check (one query). For checking many sections at once — e.g.
+    rendering a whole submission's tree — use :func:`parent_section_ids` instead,
+    which resolves leaf-ness for the entire set in memory without a query per
+    section.
+    """
     return (
         db.query(DossierSection.id)
         .filter(DossierSection.parent_section_id == section_id)
         .first()
         is None
     )
+
+
+def parent_section_ids(sections: Iterable[DossierSection]) -> Set[uuid.UUID]:
+    """
+    The ids among ``sections`` that are parents (listed as another section's parent).
+
+    Batched counterpart to :func:`is_leaf_section`: when you already hold every
+    section of a submission, compute this set once and test membership —
+    ``section.id not in parent_section_ids(sections)`` means it is a leaf. Avoids
+    one query per section.
+
+    Callers MUST pass the submission's *complete* section list; if a child is
+    missing from ``sections`` its parent would be wrongly classified as a leaf.
+    """
+    return {s.parent_section_id for s in sections if s.parent_section_id is not None}
 from app.ai.content_mapper import content_mapper
 from app.submissions.models import Submission
 from app.core.config import settings
@@ -268,10 +290,8 @@ class DossierGenerationService:
         sections_dict = {}
         root_sections = []
 
-        # Pre-compute which section ids are parents (have at least one child)
-        parent_ids = {
-            str(s.parent_section_id) for s in sections if s.parent_section_id is not None
-        }
+        # Pre-compute parent ids once — single source of truth for leaf-ness.
+        parent_ids = parent_section_ids(sections)
         
         # First pass: Create all section data and organize by parent
         for section in sections:
@@ -297,7 +317,7 @@ class DossierGenerationService:
                 "content": section.content,
                 "ai_extracted_content": section.ai_extracted_content,
                 "ai_confidence_score": section.ai_confidence_score,
-                "is_leaf": str(section.id) not in parent_ids,
+                "is_leaf": section.id not in parent_ids,
                 "children": []
             }
             

@@ -562,6 +562,33 @@ class TemplateVersionService:
             raise NotFoundError(f"Template version not found: {template_version_id}")
         return template_version
 
+    def catalog(self) -> List[TemplateVersion]:
+        """
+        Every template version with its full regulatory breadcrumb eager-loaded
+        (profile -> submission type -> regulation -> authority -> country) plus
+        its sections, for a labelled "available templates" listing in one query.
+
+        Ordered by country, then submission type, then version (newest first).
+        """
+        return (
+            self.db.query(TemplateVersion)
+            .options(
+                joinedload(TemplateVersion.submission_profile)
+                .joinedload(SubmissionProfile.submission_type)
+                .joinedload(SubmissionType.regulation)
+                .joinedload(Regulation.authority)
+                .joinedload(Authority.country),
+                selectinload(TemplateVersion.sections),
+            )
+            .join(TemplateVersion.submission_profile)
+            .join(SubmissionProfile.submission_type)
+            .join(SubmissionType.regulation)
+            .join(Regulation.authority)
+            .join(Authority.country)
+            .order_by(Country.name, SubmissionType.name, TemplateVersion.version.desc())
+            .all()
+        )
+
     def _assert_submission_profile_exists(self, submission_profile_id: UUID) -> None:
         if not self.db.query(SubmissionProfile.id).filter(
             SubmissionProfile.id == submission_profile_id
