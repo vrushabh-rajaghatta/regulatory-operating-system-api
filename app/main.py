@@ -21,6 +21,8 @@ from app.ai.router import router as ai_router
 from app.reviews.router import router as reviews_router
 from app.validation.router import router as validation_router
 from app.dashboard.router import router as dashboard_router
+from app.regulatory.router import router as regulatory_router
+from app.configuration.router import router as configuration_router
 
 
 def create_application() -> FastAPI:
@@ -105,6 +107,18 @@ def create_application() -> FastAPI:
         tags=["dashboard"],
         dependencies=protected_route_dependencies,
     )
+    app.include_router(
+        regulatory_router,
+        prefix="/api/regulatory",
+        tags=["regulatory"],
+        dependencies=protected_route_dependencies,
+    )
+    app.include_router(
+        configuration_router,
+        prefix="/api/configuration",
+        tags=["configuration"],
+        dependencies=protected_route_dependencies,
+    )
 
     # Static file serving for uploads
     if settings.SERVE_UPLOADS_PUBLIC and os.path.exists(settings.UPLOAD_DIR):
@@ -127,7 +141,25 @@ async def startup_event():
     # Seed organizations / admin users from seed_admin_creds.json if present
     from app.auth.seed import seed_from_file
     seed_from_file()
-    
+
+    # Optionally seed the regulatory reference hierarchy (idempotent, off by default).
+    if settings.SEED_REGULATORY:
+        try:
+            from app.regulatory.seed import seed_regulatory_data
+            seed_regulatory_data()
+        except Exception as exc:
+            # Never let seeding failures block application startup.
+            logging.getLogger(__name__).exception("Regulatory seed on startup failed: %s", exc)
+
+    # Optionally seed the Configuration Registry base data (idempotent, off by default).
+    if settings.SEED_CONFIGURATION:
+        try:
+            from app.configuration.seed import seed_configuration_data
+            seed_configuration_data()
+        except Exception as exc:
+            # Never let seeding failures block application startup.
+            logging.getLogger(__name__).exception("Configuration seed on startup failed: %s", exc)
+
     # Log application startup
     from app.ai.logging_utils import AILogger
     AILogger.log_simple_call(

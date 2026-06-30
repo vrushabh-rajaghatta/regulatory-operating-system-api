@@ -38,7 +38,24 @@ class DossierGenerationService:
     def __init__(self, db: Session):
         self.db = db
         self.templates_dir = Path(__file__).parent.parent.parent / "templates" / "imdrf"
-    
+
+    def resolve_template_version(self, submission_type_id):
+        """
+        Resolve the governing template version from the regulatory registry.
+
+        Templates now hang off SubmissionProfile (SubmissionType -> SubmissionProfile
+        -> TemplateVersion). This returns the latest active version across the
+        submission type's profiles, or ``None`` when the registry has no entry —
+        in which case callers fall back to the file-based IMDRF templates so
+        existing behaviour is preserved.
+        """
+        # Imported lazily to avoid a circular import between dossier and regulatory.
+        from app.regulatory.services import TemplateVersionService
+
+        return TemplateVersionService(self.db).resolve_latest_active_for_submission_type(
+            submission_type_id
+        )
+
     def get_template_for_submission_type(self, submission_type: str) -> Optional[Dict[str, Any]]:
         """Get the appropriate IMDRF template based on submission type."""
         # Normalize the submission type to handle variations

@@ -25,10 +25,92 @@ class SubmissionBase(BaseSchema):
 
 class SubmissionCreate(SubmissionBase):
     """Schema for creating a new submission. sequence_number is auto-generated server-side."""
-    
+
     project_id: UUID = Field(..., description="ID of the parent project")
     product_id: UUID = Field(..., description="ID of the associated product")
+    template_version_id: Optional[UUID] = Field(
+        None,
+        description="Governing template version; when set, required-document placeholders are created automatically",
+    )
     created_by: Optional[str] = Field(None, max_length=255, description="User who created the submission")
+
+
+class SubmissionDocumentResponse(UUIDSchema, TimestampSchema):
+    """Schema for a submission's required-document placeholder."""
+
+    submission_id: UUID
+    required_document_id: Optional[UUID] = None
+    document_name: str
+    is_required: bool
+    status: str
+
+
+class SubmissionValidationItemResponse(UUIDSchema, TimestampSchema):
+    """Schema for a submission's validation checklist item."""
+
+    submission_id: UUID
+    validation_rule_id: Optional[UUID] = None
+    target_type: str
+    target_reference: Optional[str] = None
+    rule_type: str
+    error_message: Optional[str] = None
+    severity: str
+    status: str
+
+
+class GuidedSubmissionCreate(BaseSchema):
+    """
+    Input for the guided (atomic) submission creation flow.
+
+    Provide `submission_profile_id` (preferred). For backwards compatibility you
+    may instead provide `submission_type_id` (the submission type's active profile
+    is resolved automatically). `risk_classification_id` is optional and validated
+    against the submission type when present. The backend resolves the profile and
+    the latest active template version, then creates the submission and all
+    dependent artifacts in one transaction.
+    """
+
+    project_id: UUID = Field(..., description="Parent project")
+    product_id: UUID = Field(..., description="Associated product")
+    submission_profile_id: Optional[UUID] = Field(None, description="Chosen submission profile (preferred)")
+    submission_type_id: Optional[UUID] = Field(
+        None, description="Chosen submission type (backwards-compatible; resolves the active profile)"
+    )
+    risk_classification_id: Optional[UUID] = Field(None, description="Chosen risk classification (optional)")
+    target_submission_date: Optional[date] = Field(None, description="Target submission date")
+
+    @validator("submission_type_id", always=True)
+    def require_profile_or_type(cls, v, values):
+        if v is None and values.get("submission_profile_id") is None:
+            raise ValueError("Provide submission_profile_id or submission_type_id")
+        return v
+
+
+class GuidedSubmissionResponse(BaseSchema):
+    """Result of guided submission creation, including the resolved chain and counts."""
+
+    submission_id: UUID
+    sequence_number: str
+    status: str
+    project_id: UUID
+    product_id: UUID
+    submission_profile_id: UUID
+    template_version_id: UUID
+    # Resolved regulatory chain (names, for display/confirmation).
+    country: str
+    authority: str
+    regulation: str
+    submission_type: str
+    submission_profile: str
+    risk_classification: Optional[str] = None
+    template_version: str
+    # What was created automatically.
+    dossier_sections_count: int
+    required_documents_count: int
+    validation_items_count: int
+    target_submission_date: Optional[date] = None
+    created_at: datetime
+    message: str
 
 
 class SubmissionUpdate(BaseSchema):

@@ -12,12 +12,19 @@ from datetime import datetime
 from app.core.database import get_db
 from app.auth.dependencies import get_current_user
 from app.auth.models import User
-from app.submissions.models import Submission
+from app.submissions.models import Submission, SubmissionDocument, SubmissionValidationItem
 from app.products.models import Product
 from app.projects.models import Project
 from app.dossier.models import DossierSection
 from app.dossier.services import DossierGenerationService, DossierContentService, LeafSectionRequiredError
 from app.ai.services import AIProcessingService
+from app.regulatory.models import TemplateVersion
+from app.regulatory.services import RequiredDocumentService
+from app.submissions.services import SubmissionCreationService
+from app.submissions.configuration_resolver import (
+    ConfigurationResolver,
+    SubmissionNotFoundError,
+)
 
 
 def _derive_section_status(section) -> str:
@@ -62,7 +69,11 @@ from app.submissions.schemas import (
     SubmissionWorkflowAction,
     SubmissionStats,
     SubmissionSearchFilters,
-    SubmissionProgress
+    SubmissionProgress,
+    SubmissionDocumentResponse,
+    SubmissionValidationItemResponse,
+    GuidedSubmissionCreate,
+    GuidedSubmissionResponse,
 )
 from app.core.schemas import PaginationParams, PaginatedResponse, MessageResponse
 
@@ -96,6 +107,56 @@ def _generate_sequence_number(db: Session, product_id: UUID) -> str:
     return f"{max_seq + 1:0{SEQUENCE_NUMBER_WIDTH}d}"
 
 
+def _create_required_document_placeholders(db: Session, submission: Submission) -> int:
+    """
+    Create per-submission placeholders for each required document of the
+    submission's template version.
+
+    Best-effort and idempotent: a no-op if the submission has no template
+    version. Returns the number of placeholders created.
+
+    The governing template version is resolved through ConfigurationResolver —
+    the single source of truth for a submission's runtime configuration.
+    """
+    try:
+        runtime = ConfigurationResolver(db).resolve(submission.id, use_cache=False)
+    except SubmissionNotFoundError:
+        return 0
+    if not runtime.template_version_id:
+        return 0
+
+    required_documents = RequiredDocumentService(db).list_for_template_version(
+        runtime.template_version_id
+    )
+
+    # Avoid duplicating placeholders if regenerated for the same submission.
+    existing_doc_ids = {
+        doc_id
+        for (doc_id,) in db.query(SubmissionDocument.required_document_id)
+        .filter(SubmissionDocument.submission_id == submission.id)
+        .all()
+    }
+
+    created = 0
+    for required_document in required_documents:
+        if required_document.id in existing_doc_ids:
+            continue
+        db.add(
+            SubmissionDocument(
+                submission_id=submission.id,
+                required_document_id=required_document.id,
+                document_name=required_document.name,
+                is_required=required_document.required,
+                status="pending",
+            )
+        )
+        created += 1
+
+    if created:
+        db.commit()
+    return created
+
+
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_submission(
     submission: SubmissionCreate,
@@ -115,7 +176,7 @@ async def create_submission(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Project not found"
         )
-    
+
     product = db.query(Product).filter(
         and_(
             Product.id == submission.product_id,
@@ -127,13 +188,25 @@ async def create_submission(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Product not found or does not belong to the specified project"
         )
-    
+
+    # If a template version was supplied, verify it exists before linking.
+    if submission.template_version_id:
+        template_version = db.query(TemplateVersion).filter(
+            TemplateVersion.id == submission.template_version_id
+        ).first()
+        if not template_version:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Template version not found"
+            )
+
     # Create submission (inherits org from its project).
     sequence_number = _generate_sequence_number(db, submission.product_id)
     db_submission = Submission(
         organization_id=project.organization_id,
         project_id=submission.project_id,
         product_id=submission.product_id,
+        template_version_id=submission.template_version_id,
         sequence_number=sequence_number,
         submission_type=submission.submission_type,
         target_submission_date=submission.target_submission_date
@@ -141,19 +214,26 @@ async def create_submission(
     db.add(db_submission)
     db.commit()
     db.refresh(db_submission)
-    
+
     # Generate dossier structure automatically based on submission type
     try:
         dossier_service = DossierGenerationService(db)
         dossier_sections = dossier_service.generate_dossier_for_submission(db_submission)
-        
+
         sections_count = len(dossier_sections)
         message = f"Submission created successfully with {sections_count} dossier sections generated"
     except Exception as e:
         # If dossier generation fails, log the error but don't fail the submission creation
         print(f"Warning: Failed to generate dossier for submission {db_submission.id}: {str(e)}")
         message = "Submission created successfully (dossier generation failed - can be regenerated later)"
-    
+
+    # Create required-document placeholders from the template version (best-effort).
+    documents_count = 0
+    try:
+        documents_count = _create_required_document_placeholders(db, db_submission)
+    except Exception as e:
+        print(f"Warning: Failed to create document placeholders for submission {db_submission.id}: {str(e)}")
+
     # Return submission details
     return {
         "id": str(db_submission.id),
@@ -162,10 +242,71 @@ async def create_submission(
         "status": db_submission.status.value,
         "project_id": str(db_submission.project_id),
         "product_id": str(db_submission.product_id),
+        "template_version_id": str(db_submission.template_version_id) if db_submission.template_version_id else None,
+        "required_documents_count": documents_count,
         "target_submission_date": db_submission.target_submission_date.isoformat() if db_submission.target_submission_date else None,
         "created_at": db_submission.created_at.isoformat(),
         "message": message
     }
+
+
+@router.post(
+    "/guided",
+    response_model=GuidedSubmissionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_submission_guided(
+    payload: GuidedSubmissionCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Create a submission via the guided flow.
+
+    Resolves the regulatory chain (Country -> Authority -> Regulation ->
+    Submission Type -> Risk Class -> Submission Profile -> latest active Template
+    Version) and then atomically creates the submission, its dossier sections,
+    required-document placeholders and validation checklist. The entire operation
+    runs in a single transaction and is rolled back if any step fails.
+    """
+    result = SubmissionCreationService(db).create_guided(
+        current_user,
+        project_id=payload.project_id,
+        product_id=payload.product_id,
+        submission_profile_id=payload.submission_profile_id,
+        submission_type_id=payload.submission_type_id,
+        risk_classification_id=payload.risk_classification_id,
+        target_submission_date=payload.target_submission_date,
+    )
+    submission = result.submission
+
+    return GuidedSubmissionResponse(
+        submission_id=submission.id,
+        sequence_number=submission.sequence_number,
+        status=submission.status.value,
+        project_id=submission.project_id,
+        product_id=submission.product_id,
+        submission_profile_id=result.submission_profile.id,
+        template_version_id=result.template_version.id,
+        country=result.country.name,
+        authority=result.authority.name,
+        regulation=result.regulation.name,
+        submission_type=result.submission_type.name,
+        submission_profile=result.submission_profile.name,
+        risk_classification=result.risk_classification.name if result.risk_classification else None,
+        template_version=result.template_version.version,
+        dossier_sections_count=result.dossier_sections_count,
+        required_documents_count=result.required_documents_count,
+        validation_items_count=result.validation_items_count,
+        target_submission_date=submission.target_submission_date,
+        created_at=submission.created_at,
+        message=(
+            f"Submission {submission.sequence_number} created with "
+            f"{result.dossier_sections_count} dossier sections, "
+            f"{result.required_documents_count} required-document placeholders and "
+            f"{result.validation_items_count} validation checklist items."
+        ),
+    )
 
 
 @router.get("/", response_model=PaginatedResponse)
@@ -499,6 +640,45 @@ async def execute_workflow_action(
     db.commit()
     
     return MessageResponse(message=message)
+
+
+@router.get("/{submission_id}/documents", response_model=List[SubmissionDocumentResponse])
+async def list_submission_documents(
+    submission_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List the required-document placeholders for a submission."""
+    # Org-scoped submission lookup acts as the access check.
+    _get_scoped_submission(submission_id, db, current_user)
+    documents = (
+        db.query(SubmissionDocument)
+        .filter(SubmissionDocument.submission_id == submission_id)
+        .order_by(SubmissionDocument.document_name)
+        .all()
+    )
+    return [SubmissionDocumentResponse.model_validate(d) for d in documents]
+
+
+@router.get(
+    "/{submission_id}/validation-checklist",
+    response_model=List[SubmissionValidationItemResponse],
+)
+async def list_submission_validation_checklist(
+    submission_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List the validation checklist items for a submission."""
+    # Org-scoped submission lookup acts as the access check.
+    _get_scoped_submission(submission_id, db, current_user)
+    items = (
+        db.query(SubmissionValidationItem)
+        .filter(SubmissionValidationItem.submission_id == submission_id)
+        .order_by(SubmissionValidationItem.target_type, SubmissionValidationItem.rule_type)
+        .all()
+    )
+    return [SubmissionValidationItemResponse.model_validate(item) for item in items]
 
 
 @router.get("/{submission_id}/progress", response_model=SubmissionProgress)
