@@ -19,7 +19,7 @@ class SubmissionBase(BaseSchema):
     """Base submission schema with common fields."""
     
     submission_type: Optional[str] = Field(None, max_length=255, description="Type of submission (e.g., Medical Device License)")
-    health_canada_reference: Optional[str] = Field(None, max_length=255, description="Health Canada reference number")
+    authority_reference: Optional[str] = Field(None, max_length=255, description="Reference number assigned by the regulatory authority")
     target_submission_date: Optional[date] = Field(None, description="Target date for submission")
 
 
@@ -118,7 +118,7 @@ class SubmissionUpdate(BaseSchema):
     
     submission_type: Optional[str] = Field(None, max_length=255)
     status: Optional[SubmissionStatusEnum] = None
-    health_canada_reference: Optional[str] = Field(None, max_length=255)
+    authority_reference: Optional[str] = Field(None, max_length=255)
     target_submission_date: Optional[date] = None
     updated_by: Optional[str] = Field(None, max_length=255)
 

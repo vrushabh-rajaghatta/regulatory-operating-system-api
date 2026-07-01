@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Seed the regulatory engine reference hierarchy.
 
-Seeds Canada > Health Canada > Medical Device > SOR/98-282 >
-Medical Device Licence > [Class I-IV] > Template Version 2025.1, with sample
-template sections and required documents.
+Seeds every regulatory ecosystem (Health Canada, FDA, EU MDR/IVDR, TGA, PMDA):
+Country > Authority > Regulation > Submission Type > Submission Profile >
+Template Version 2025.1, with template sections, required documents and
+validation rules.
 
 Usage:
     python scripts/seed_regulatory.py

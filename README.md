@@ -1,6 +1,6 @@
 # AI-Assisted Regulatory Submission Builder - Backend
 
-A FastAPI-based backend for building regulatory submission dossiers for Health Canada medical device submissions using IMDRF templates.
+A FastAPI-based backend for building regulatory submission dossiers across global regulatory ecosystems (Health Canada, FDA, EU MDR/IVDR, TGA, PMDA) using IMDRF and jurisdiction-specific templates.
 
 ## Architecture
 

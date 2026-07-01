@@ -58,9 +58,9 @@ class StandardValidationProcessor(ValidationProcessor):
         return self._report(issues)
 
 
-class HealthCanadaValidationProcessor(StandardValidationProcessor):
+class BilingualValidationProcessor(StandardValidationProcessor):
     """
-    Extends the standard checks with bilingual enforcement.
+    Extends the standard checks with multi-language enforcement.
 
     The required languages come from the configuration (e.g. ``["en", "fr"]``),
     so this is selected by business behaviour — not by any authority name.

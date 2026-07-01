@@ -49,7 +49,8 @@ class Submission(BaseModel, AuditMixin):
     sequence_number = Column(String(32), nullable=False, index=True)
     submission_type = Column(String(255), nullable=True)  # e.g., "Medical Device License", "Amendment"
     status = Column(Enum(SubmissionStatus), default=SubmissionStatus.DRAFT, nullable=False, index=True)
-    health_canada_reference = Column(String(255), nullable=True, index=True)
+    # Reference/tracking number assigned by the regulatory authority (jurisdiction-agnostic).
+    authority_reference = Column(String(255), nullable=True, index=True)
     target_submission_date = Column(Date, nullable=True)
     submitted_at = Column(DateTime, nullable=True)
     approved_at = Column(DateTime, nullable=True)

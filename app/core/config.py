@@ -37,8 +37,8 @@ class Settings(BaseSettings):
     # IMDRF Templates
     TEMPLATES_DIR: str = "./templates/imdrf"
 
-    # Seeding: when true, the idempotent regulatory reference hierarchy
-    # (Canada > Health Canada > ... > Template Version 2025.1) is seeded on startup.
+    # Seeding: when true, the idempotent regulatory reference hierarchy for every
+    # ecosystem (Country > Authority > ... > Template Version 2025.1) is seeded on startup.
     SEED_REGULATORY: bool = False
 
     # Seeding: when true, the idempotent Configuration Registry base data

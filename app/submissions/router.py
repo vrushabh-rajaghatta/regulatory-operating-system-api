@@ -420,7 +420,7 @@ async def get_submission(
         id=submission.id,
         sequence_number=submission.sequence_number,
         submission_type=submission.submission_type,
-        health_canada_reference=submission.health_canada_reference,
+        authority_reference=submission.authority_reference,
         target_submission_date=submission.target_submission_date,
         project_id=submission.project_id,
         product_id=submission.product_id,
@@ -512,7 +512,7 @@ async def update_submission(
         "status": db_submission.status.value if db_submission.status else "draft",
         "project_id": str(db_submission.project_id),
         "product_id": str(db_submission.product_id),
-        "health_canada_reference": db_submission.health_canada_reference,
+        "authority_reference": db_submission.authority_reference,
         "target_submission_date": db_submission.target_submission_date.isoformat() if db_submission.target_submission_date else None,
         "submitted_at": db_submission.submitted_at.isoformat() if db_submission.submitted_at else None,
         "approved_at": db_submission.approved_at.isoformat() if db_submission.approved_at else None,
@@ -713,7 +713,7 @@ async def get_submission_progress(
     elif submission.status == "human_review":
         next_steps = ["Review AI-generated content", "Approve or request changes"]
     elif submission.status == "approved":
-        next_steps = ["Final review", "Submit to Health Canada"]
+        next_steps = ["Final review", "Submit to regulatory authority"]
     
     progress = SubmissionProgress(
         submission_id=submission_id,
